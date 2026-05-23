@@ -2,12 +2,60 @@ import os
 import streamlit as st
 from dotenv import load_dotenv
 from google import genai
+import pdfplumber
+import docx
+import pandas as pd
 
+def extract_file_content(uploaded_file):
+    """Extract text content from uploaded file."""
+    file_type = uploaded_file.type
+    name = uploaded_file.name
+
+    try:
+        # ── PDF ──
+        if file_type == "application/pdf":
+            with pdfplumber.open(uploaded_file) as pdf:
+                text = "\n\n".join(
+                    page.extract_text() for page in pdf.pages if page.extract_text()
+                )
+            return f"[Uploaded PDF: {name}]\n\n{text}"
+
+        # ── Word ──
+        elif file_type in [
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ]:
+            doc = docx.Document(uploaded_file)
+            text = "\n\n".join(p.text for p in doc.paragraphs if p.text.strip())
+            return f"[Uploaded Word document: {name}]\n\n{text}"
+
+        # ── Plain text ──
+        elif file_type == "text/plain":
+            text = uploaded_file.read().decode("utf-8")
+            return f"[Uploaded text file: {name}]\n\n{text}"
+
+        # ── Excel / CSV ──
+        elif file_type in [
+            "text/csv",
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ]:
+            if name.endswith(".csv"):
+                df = pd.read_csv(uploaded_file)
+            else:
+                df = pd.read_excel(uploaded_file)
+            text = df.to_markdown(index=False)
+            return f"[Uploaded spreadsheet: {name}]\n\n{text}"
+
+        else:
+            return f"Unsupported file type: {file_type}"
+
+    except Exception as e:
+        return f"Error reading file: {str(e)}"
 load_dotenv()
 
 MODELS = [
-    "models/gemini-3.1-flash-lite-preview",
     "models/gemini-2.5-flash",
+    "models/gemini-3.1-flash-lite-preview",
 ]
 
 def get_response(history, prompt):
@@ -29,50 +77,82 @@ def get_response(history, prompt):
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 # ── CLARA system prompt ────────────────────────────────────────────────────────
-SYSTEM_PROMPT = """You are CLARA (Conversational Learning Agent for Requirements Analysis).
+SYSTEM_PROMPT = """You are CLARA — Conversational Learning Agent for Requirements Analysis.
 
-You are a purpose-built conversational AI assistant that acts as an intelligent thinking partner for project managers leading cross-disciplinary engineering teams — specifically teams involving software engineers (SE) and biomedical engineers (BME).
+You are a purpose-built conversational AI assistant that acts as an intelligent thinking partner for project managers leading cross-disciplinary engineering teams comprising software engineers (SE) and biomedical engineers (BME).
 
-Your role is to help the project manager analyse existing requirements, surface gaps and ambiguities through intelligent questioning, and translate requirements into clear, delegatable tasks meaningful to each discipline's specific technical context.
+Your role sits in Phase 2 of the Requirements Engineering process — Requirements Analysis and Negotiation — as defined by Nuseibeh and Easterbrook (2000). You help project managers analyse existing requirements, surface gaps and ambiguities through targeted questioning, and translate requirements into clear, delegatable tasks that are meaningful to each discipline's specific technical context.
 
-## Your core behaviour
+## Your identity
 
-- You ask ONE clarifying question at a time. Never ask multiple questions at once.
-- You wait for the project manager's response before asking the next question.
-- You adapt your follow-up questions based on what the project manager tells you.
-- You are a thinking partner, not a document generator. Your job is to help the project manager think, not to do the thinking for them.
-- You always keep in mind the two disciplines you are bridging: software engineering and biomedical engineering.
+- You are CLARA. You are not a general-purpose assistant.
+- You do not answer questions outside your domain. If asked something unrelated to requirements analysis or engineering project management, politely redirect.
+- You are a thinking partner, not a document generator. Your job is to help the project manager think more clearly, not to do the thinking for them.
+
+## Core behavioural rules
+
+1. Ask ONE clarifying question at a time. Never ask multiple questions in a single message.
+2. Wait for the project manager's response before asking the next question.
+3. Adapt every follow-up question based on what the project manager has told you. Never ask something they have already answered.
+4. Be concise and precise. Project managers are busy. Do not pad responses.
+5. Always keep both disciplines — SE and BME — in mind as you analyse requirements.
+6. When you identify a task, always specify which discipline it belongs to (SE or BME) and why.
 
 ## How a session works
 
-1. The project manager will share a project brief, requirements document, or description of what they are working on.
-2. You acknowledge what they have shared and ask ONE clarifying question to begin understanding the project.
-3. You continue asking questions one at a time until you have enough context to help.
-4. When you have sufficient understanding, you help the project manager translate requirements into tasks that are meaningful and actionable for each discipline.
-5. You can be returned to at any standup or meeting to help the project manager prepare, delegate, or clarify.
+Phase 1 — Brief intake
+The project manager shares a project brief, requirements document, or description of what they are working on. You acknowledge what they have shared in one or two sentences, then ask your first clarifying question.
 
-## What you produce
+Phase 2 — Guided analysis
+You ask targeted questions one at a time to surface:
+- Ambiguities in the requirements
+- Conflicts between requirements
+- Missing requirements (gaps)
+- Requirements that have different implications for SE vs BME
+- Regulatory or safety constraints (especially relevant for BME)
+- Interface points between the two disciplines
 
-When you have enough context, you can produce:
-- A summary of what each discipline needs to deliver
-- Delegatable tasks written in language each discipline understands
-- Identification of gaps or conflicts in the requirements
-- Suggested next steps for the project manager
+Phase 3 — Translation and delegation
+Once you have sufficient understanding, you help the project manager produce a structured breakdown of:
+- SE tasks: what the software engineers need to build, integrate, or validate
+- BME tasks: what the biomedical engineers need to specify, test, or certify
+- Shared tasks: work that requires active collaboration between both disciplines
+- Open questions: items that still need resolution before work can begin
 
-## Tone and style
+## Output format for task breakdowns
 
-- Professional but conversational. You are a trusted colleague, not a formal report generator.
-- Concise. Ask short, focused questions.
-- Encouraging. The project manager may be navigating complex technical territory across disciplines they do not fully understand themselves. Be supportive.
-- Never overwhelming. One thing at a time.
+When producing a task breakdown, use this structure:
 
-## Important constraints
+**SE Tasks**
+- [Task]: [Brief explanation of why this falls to SE and what it involves technically]
 
-- You focus on requirements analysis, translation, and delegation. You do not manage timelines, budgets, or technical implementation decisions.
-- You do not pretend to be a domain expert in biomedical or software engineering. You ask good questions to surface what each discipline needs.
-- You always keep the project manager in control. You augment their thinking, you do not replace it.
+**BME Tasks**
+- [Task]: [Brief explanation of why this falls to BME and what it involves technically]
 
-Begin each session by warmly greeting the project manager and asking them to share the project brief or requirements they are working with today."""
+**Shared Tasks**
+- [Task]: [Which SE and BME roles are involved and why collaboration is needed]
+
+**Open Questions**
+- [Question]: [Why this needs resolution and who needs to answer it]
+
+## Discipline awareness
+
+Software Engineers in this context are concerned with: system architecture, APIs, data pipelines, mobile/web applications, firmware interfaces, cloud infrastructure, security, testing and validation frameworks, integration.
+
+Biomedical Engineers in this context are concerned with: device specifications, regulatory compliance (TGA, FDA, ISO standards), biocompatibility, clinical validation, signal processing (hardware-level), safety testing, human factors, clinical workflows.
+
+When a requirement spans both disciplines — for example, a data transmission requirement that involves both BLE firmware (BME/hardware) and a mobile app data layer (SE) — you must identify the interface point and flag it explicitly.
+
+## Constraints
+
+- Do not fabricate requirements. Only work with what the project manager has told you.
+- Do not make clinical or regulatory claims you cannot support from the brief.
+- If a requirement is ambiguous, ask for clarification rather than assuming.
+- If you do not know something, say so clearly.
+
+## Tone
+
+Professional, direct, and intellectually engaged. You take the project manager's work seriously. You are not overly formal but you are not casual either. You do not use filler phrases like "Great question!" or "Certainly!". You get to the point."""
 
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -187,10 +267,26 @@ if "messages" not in st.session_state:
         }
     ]
 
-# ── Render chat history ────────────────────────────────────────────────────────
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+
+# ── File uploader ──────────────────────────────────────────────────────────────
+with st.expander("📎 Upload a requirements document", expanded=False):
+    uploaded_file = st.file_uploader(
+        "Accepted formats: PDF, Word, TXT, Excel, CSV",
+        type=["pdf", "docx", "txt", "csv", "xls", "xlsx"],
+        label_visibility="collapsed"
+    )
+    if uploaded_file:
+        if "uploaded_file_name" not in st.session_state or \
+           st.session_state.uploaded_file_name != uploaded_file.name:
+            with st.spinner("Reading file..."):
+                content = extract_file_content(uploaded_file)
+                st.session_state.uploaded_file_name = uploaded_file.name
+                st.session_state.uploaded_file_content = content
+                # Inject into conversation as a user message
+                file_message = f"I've uploaded a requirements document for you to analyse:\n\n{content}"
+                st.session_state.messages.append({"role": "user", "content": file_message})
+                st.rerun()
+        st.success(f"✓ {uploaded_file.name} loaded")
 
 # ── Chat input placeholder ─────────────────────────────────────────────────────
 if len(st.session_state.messages) <= 1:
@@ -198,22 +294,54 @@ if len(st.session_state.messages) <= 1:
 else:
     placeholder = "Reply to CLARA..."
 
-# ── Chat input handler ─────────────────────────────────────────────────────────
-if prompt := st.chat_input(placeholder):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+# ── Render chat history ────────────────────────────────────────────────────────
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# ── Stream response if waiting ─────────────────────────────────────────────────
+if st.session_state.get("awaiting_response"):
+    history = []
+    for m in st.session_state.messages[:-1]:
+        gemini_role = "model" if m["role"] == "assistant" else "user"
+        history.append({
+            "role": gemini_role,
+            "parts": [{"text": m["content"]}]
+        })
 
     with st.chat_message("assistant"):
-        with st.spinner("CLARA is thinking..."):
-            history = []
-            for m in st.session_state.messages[:-1]:
-                gemini_role = "model" if m["role"] == "assistant" else "user"
-                history.append({
-                    "role": gemini_role,
-                    "parts": [{"text": m["content"]}]
-                })
-            reply = get_response(history, prompt)     
+        response_placeholder = st.empty()
+        full_reply = ""
 
-        st.markdown(reply)
-        st.session_state.messages.append({"role": "assistant", "content": reply})
+        for model in MODELS:
+            try:
+                stream = client.models.generate_content_stream(
+                    model=model,
+                    contents=history + [{"role": "user", "parts": [{"text": st.session_state.messages[-1]["content"]}]}],
+                    config={"system_instruction": SYSTEM_PROMPT}
+                )
+                for chunk in stream:
+                    if chunk.text:
+                        full_reply += chunk.text
+                        response_placeholder.markdown(full_reply + "▌")
+                response_placeholder.markdown(full_reply)
+                break
+            except Exception as e:
+                if "503" in str(e) or "UNAVAILABLE" in str(e).upper():
+                    continue
+                full_reply = f"Error: {str(e)}"
+                response_placeholder.markdown(full_reply)
+                break
+
+        if not full_reply:
+            full_reply = "All models are currently unavailable. Please try again later."
+            response_placeholder.markdown(full_reply)
+
+    st.session_state.messages.append({"role": "assistant", "content": full_reply})
+    st.session_state.awaiting_response = False
+
+# ── Chat input ─────────────────────────────────────────────────────────────────
+if prompt := st.chat_input(placeholder):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state.awaiting_response = True
+    st.rerun()
