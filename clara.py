@@ -5,6 +5,75 @@ from google import genai
 import pdfplumber
 import docx
 import pandas as pd
+import xml.etree.ElementTree as ET
+
+def extract_pure_xml(file_bytes):
+    """Extract requirements from a PURE dataset XML file into readable plain text."""
+    root = ET.fromstring(file_bytes)
+
+    # Handle optional namespace (e.g. xmlns="req_document.xsd")
+    tag = root.tag
+    ns = tag[:tag.index('}')+1] if tag.startswith('{') else ''
+
+    lines = []
+
+    # Document title block
+    title_el = root.find(f'{ns}title')
+    if title_el is not None:
+        titles = [
+            t.text.strip()
+            for t in title_el.findall(f'{ns}title')
+            if t.text and t.text.strip()
+        ]
+        if titles:
+            lines.append("DOCUMENT: " + " | ".join(titles))
+            lines.append("")
+
+    def get_text(el):
+        """Recursively concatenate all text content from an element."""
+        parts = []
+        if el.text and el.text.strip():
+            parts.append(el.text.strip())
+        for child in el:
+            child_text = get_text(child)
+            if child_text:
+                parts.append(child_text)
+            if child.tail and child.tail.strip():
+                parts.append(child.tail.strip())
+        return " ".join(parts)
+
+    def process_section(p_el, depth=0):
+        indent = "  " * depth
+
+        title_el = p_el.find(f'{ns}title')
+        if title_el is not None and title_el.text and title_el.text.strip():
+            lines.append(f"{indent}## {title_el.text.strip()}")
+
+        body_el = p_el.find(f'{ns}text_body')
+        if body_el is not None:
+            body_text = get_text(body_el)
+            if body_text:
+                lines.append(f"{indent}{body_text}")
+
+        # Individual requirements within this section
+        for req in p_el.findall(f'{ns}req'):
+            req_id = req.get('id', '?')
+            req_body = req.find(f'{ns}text_body')
+            if req_body is not None:
+                req_text = get_text(req_body)
+                if req_text:
+                    lines.append(f"{indent}  REQ-{req_id}: {req_text}")
+
+        # Recurse into nested subsections
+        for sub_p in p_el.findall(f'{ns}p'):
+            process_section(sub_p, depth + 1)
+
+    for p in root.findall(f'{ns}p'):
+        process_section(p)
+        lines.append("")
+
+    return "\n".join(lines)
+
 
 def extract_file_content(uploaded_file):
     """Extract text content from uploaded file."""
@@ -45,6 +114,15 @@ def extract_file_content(uploaded_file):
                 df = pd.read_excel(uploaded_file)
             text = df.to_markdown(index=False)
             return f"[Uploaded spreadsheet: {name}]\n\n{text}"
+
+        # ── XML (PURE dataset) ──
+        elif file_type in ["text/xml", "application/xml"] or name.endswith(".xml"):
+            file_bytes = uploaded_file.read()
+            try:
+                text = extract_pure_xml(file_bytes)
+                return f"[Uploaded PURE dataset XML: {name}]\n\n{text}"
+            except ET.ParseError as xml_err:
+                return f"Error parsing XML file: {str(xml_err)}"
 
         else:
             return f"Unsupported file type: {file_type}"
@@ -280,8 +358,8 @@ if "messages" not in st.session_state:
 # ── File uploader ──────────────────────────────────────────────────────────────
 with st.expander("📎 Upload a requirements document", expanded=False):
     uploaded_file = st.file_uploader(
-        "Accepted formats: PDF, Word, TXT, Excel, CSV",
-        type=["pdf", "docx", "txt", "csv", "xls", "xlsx"],
+        "Accepted formats: PDF, Word, TXT, Excel, CSV, XML (PURE dataset)",
+        type=["pdf", "docx", "txt", "csv", "xls", "xlsx", "xml"],
         label_visibility="collapsed"
     )
     if uploaded_file:
