@@ -263,102 +263,179 @@ st.set_page_config(
     layout="centered"
 )
 
-# ── Custom CSS ─────────────────────────────────────────────────────────────────
+# ── Custom CSS (shadcn/ui-inspired: zinc neutrals, Inter, restrained accents) ──
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@300;400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-    /* Dark background */
+    :root {
+        --background: #09090b;
+        --card: #18181b;
+        --card-hover: #1f1f23;
+        --border: #27272a;
+        --foreground: #fafafa;
+        --muted-foreground: #a1a1aa;
+        --primary: #3b82f6;
+        --primary-foreground: #fafafa;
+        --radius: 0.65rem;
+    }
+
+    html, body, [class*="css"] {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    }
+
     .stApp {
-        background: linear-gradient(135deg, #0a0a1a 0%, #0d0d2b 50%, #0a0a1a 100%);
-        color: #e8e8f0;
+        background: var(--background);
+        color: var(--foreground);
     }
 
-    /* Hide default streamlit elements */
+    /* Hide default streamlit chrome */
     #MainMenu, footer, header {visibility: hidden;}
-    .block-container {padding-top: 2rem;}
+    .block-container {padding-top: 2.5rem; max-width: 720px;}
 
-    /* Title styling */
-    h1 {
-        font-family: 'Space Mono', monospace !important;
-        font-size: 2rem !important;
-        letter-spacing: 0.3em !important;
-        color: #7eb8f7 !important;
-        text-align: center;
-        margin-bottom: 0 !important;
+    /* ── Header ── */
+    .clara-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.35rem;
+    }
+    .clara-mark {
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        background: var(--primary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 0.95rem;
+        color: var(--primary-foreground);
+        flex-shrink: 0;
+    }
+    .clara-title {
+        font-size: 1.35rem;
+        font-weight: 600;
+        color: var(--foreground);
+        letter-spacing: -0.01em;
+        line-height: 1.2;
+    }
+    .clara-subtitle {
+        font-size: 0.82rem;
+        color: var(--muted-foreground);
+        font-weight: 400;
+        margin-top: 1px;
+    }
+    .clara-divider {
+        border: none;
+        border-top: 1px solid var(--border);
+        margin: 1.25rem 0 1.5rem 0;
     }
 
-    /* Caption styling */
-    .stApp p.caption, [data-testid="stCaptionContainer"] p {
-        font-family: 'Inter', sans-serif !important;
-        color: #6a7aaa !important;
-        text-align: center;
-        font-size: 0.8rem !important;
-        letter-spacing: 0.15em !important;
-        text-transform: uppercase;
+    /* ── File uploader expander ── */
+    [data-testid="stExpander"] {
+        border: 1px solid var(--border) !important;
+        border-radius: var(--radius) !important;
+        background: var(--card) !important;
+    }
+    [data-testid="stExpander"] summary {
+        font-size: 0.88rem !important;
+        color: var(--foreground) !important;
+    }
+    [data-testid="stFileUploaderDropzone"] {
+        background: var(--background) !important;
+        border: 1px dashed var(--border) !important;
+        border-radius: var(--radius) !important;
     }
 
-    /* Chat message container */
+    /* ── Chat messages ── */
     [data-testid="stChatMessage"] {
-        background: rgba(255, 255, 255, 0.03) !important;
-        border: 1px solid rgba(126, 184, 247, 0.1) !important;
-        border-radius: 12px !important;
-        margin-bottom: 0.75rem !important;
-        padding: 0.75rem !important;
+        background: var(--card) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: var(--radius) !important;
+        margin-bottom: 0.6rem !important;
+        padding: 0.85rem 1rem !important;
+        box-shadow: none !important;
     }
 
-    /* Assistant messages */
-    [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]) {
-        border-left: 2px solid #7eb8f7 !important;
-        background: rgba(126, 184, 247, 0.04) !important;
-    }
-
-    /* User messages */
     [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
-        border-left: 2px solid #a78bfa !important;
-        background: rgba(167, 139, 250, 0.04) !important;
+        background: var(--card-hover) !important;
     }
 
-    /* Message text */
-    [data-testid="stChatMessage"] p {
-        font-family: 'Inter', sans-serif !important;
-        font-size: 0.95rem !important;
-        color: #d8d8ee !important;
-        line-height: 1.6 !important;
+    [data-testid="stChatMessage"] p,
+    [data-testid="stChatMessage"] li {
+        font-size: 0.92rem !important;
+        color: var(--foreground) !important;
+        line-height: 1.65 !important;
     }
 
-    /* Chat input */
+    [data-testid="stChatMessageAvatarAssistant"],
+    [data-testid="stChatMessageAvatarUser"] {
+        border-radius: 6px !important;
+    }
+
+    /* ── Bottom bar (fixed footer holding the chat input) ── */
+    [data-testid="stBottom"] > div {
+        background: var(--background) !important;
+    }
+    [data-testid="stBottomBlockContainer"] {
+        background: var(--background) !important;
+        border-top: 1px solid var(--border) !important;
+        padding-top: 1rem !important;
+    }
+
+    /* ── Chat input ── */
     [data-testid="stChatInput"] {
-        background: rgba(255, 255, 255, 0.05) !important;
-        border: 1px solid rgba(126, 184, 247, 0.2) !important;
-        border-radius: 12px !important;
+        background: var(--card) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: var(--radius) !important;
+        transition: border-color 0.15s ease;
     }
-
+    [data-testid="stChatInput"]:focus-within {
+        border-color: var(--primary) !important;
+        box-shadow: 0 0 0 1px var(--primary) !important;
+    }
     [data-testid="stChatInput"] textarea {
         background: transparent !important;
-        color: #e8e8f0 !important;
+        color: var(--foreground) !important;
         font-family: 'Inter', sans-serif !important;
+        font-size: 0.92rem !important;
+    }
+    [data-testid="stChatInput"] textarea::placeholder {
+        color: var(--muted-foreground) !important;
     }
 
-    /* Spinner */
+    /* ── Alerts (upload success) ── */
+    [data-testid="stAlert"] {
+        background: var(--card) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: var(--radius) !important;
+        color: var(--foreground) !important;
+    }
+
+    /* ── Spinner ── */
     .stSpinner > div {
-        border-color: #7eb8f7 transparent transparent transparent !important;
+        border-color: var(--primary) transparent transparent transparent !important;
     }
 
-    /* Divider line under title */
-    .clara-divider {
-        width: 60px;
-        height: 2px;
-        background: linear-gradient(90deg, transparent, #7eb8f7, transparent);
-        margin: 0.5rem auto 1.5rem auto;
-    }
+    /* Scrollbar polish */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
     </style>
 """, unsafe_allow_html=True)
 
 # ── Header ─────────────────────────────────────────────────────────────────────
-st.title("CLARA")
-st.caption("Conversational Learning Agent for Requirements Analysis")
-st.markdown('<div class="clara-divider"></div>', unsafe_allow_html=True)
+st.markdown("""
+    <div class="clara-header">
+        <div class="clara-mark">C</div>
+        <div>
+            <div class="clara-title">CLARA</div>
+            <div class="clara-subtitle">Conversational Learning Agent for Requirements Analysis</div>
+        </div>
+    </div>
+    <hr class="clara-divider" />
+""", unsafe_allow_html=True)
 
 # ── Session state ──────────────────────────────────────────────────────────────
 if "messages" not in st.session_state:
